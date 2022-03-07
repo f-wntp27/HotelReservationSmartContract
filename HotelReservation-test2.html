@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Hotel Reservation</title>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/web3@latest/dist/web3.min.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <div class="item-header">
+            <h1 style="margin-block-end: 0.5rem;">Hotel Reservation</h1>
+        </div>
+        <div class="item-subheader">
+            <p id="current-address"></p>
+        </div>
+        <div class="item-select">
+            <div id="grid-container-1" class="grid-container">
+                <script>
+                    let hotelData = [
+                        {
+                            Room: "Abu Dhabi",
+                            PicSrc: "./photo/Abudhabi.png",
+                            ButtonID: "btnReserve1",
+                            Price: 0.001,
+                        },
+                        {
+                            Room: "Swiss",
+                            PicSrc: "./photo/Swiss.jpg",
+                            ButtonID: "btnReserve2",
+                            Price: 0.0015,
+                        },
+                        {
+                            Room: "New Zealand",
+                            PicSrc: "./photo/NewZealandIII.jpg",
+                            ButtonID: "btnReserve3",
+                            Price: 0.002,
+                        },
+                        {
+                            Room: "Japan",
+                            PicSrc: "./photo/JapanIII.jpg",
+                            ButtonID: "btnReserve4",
+                            Price: 0.003,
+                        },
+                        {
+                            Room: "Africa",
+                            PicSrc: "./photo/Africa.jpg",
+                            ButtonID: "btnReserve5",
+                            Price: 0.0025,
+                        },
+                        {
+                            Room: "Chile",
+                            PicSrc: "./photo/ChileX.jpg",
+                            ButtonID: "btnReserve6",
+                            Price: 0.004,
+                        }
+                    ];
+
+                    var gridContainer = document.getElementById("grid-container-1");
+
+                    hotelData.forEach(element => {
+                        var div = document.createElement("div");
+                        div.setAttribute("class", "grid-item");
+
+                        var p = document.createElement("p");
+                        var p_text = document.createTextNode(element.Room);
+                        p.setAttribute("class", "grid-item-p");
+                        p.appendChild(p_text);
+
+                        var img = document.createElement("img");
+                        img.setAttribute("src", element.PicSrc);
+                        img.setAttribute("alt", "test-pic");
+                        img.setAttribute("class", "grid-item-img");
+
+                        var btn = document.createElement("button");
+                        btn.setAttribute("class", "grid-item-btn");
+                        btn.setAttribute("id", element.ButtonID);
+                        btn.innerHTML = "reserve";
+
+                        var p_price = document.createElement("p");
+                        var price_text = document.createTextNode(element.Price + " Ether");
+                        p_price.setAttribute("class", "grid-item-p");
+                        p_price.setAttribute("style", "font-size: 14px;");
+                        p_price.appendChild(price_text);
+
+                        div.appendChild(p);
+                        div.appendChild(img);
+                        div.appendChild(btn);
+                        div.appendChild(p_price);
+
+                        gridContainer.appendChild(div);
+                    });
+                </script>
+            </div>
+        </div>
+        <div class="item-table">
+            <table id="reserve-table">
+            </table>
+        </div>
+        <div class="item-footer">
+            <label class="col-lg-2 control-label"><b>Status</b></label>
+            <h4 id="result"></h4>
+            Status: <span id="status">Loading...</span>
+        </div>
+        <div style="padding: 2em; padding-top: 5px;">
+            <label class="col-lg-2 control-label"><b>Check Reservation</b></label>
+            <div class="combobox-div">
+                <label class="col-lg-2 control-label">Select Room</label>
+                <select id="combobox">
+                    <script>
+                        var select = document.getElementById("combobox");
+                        hotelData.forEach(element => {
+                            var option = document.createElement("option");
+                            option.setAttribute("value", element.Room);
+                            option.innerHTML = element.Room;
+
+                            select.appendChild(option);
+                        });
+                    </script>
+                </select>
+            </div>
+            <div class="input-div">
+                <label class="col-lg-2 control-label">Enter Timestamp</label>
+                <input id="timestamp" type="text">
+                <button id="reservationCheck">Check</button>
+            </div>
+        </div>
+
+    </div>
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"></script>
+    <script>
+        async function loadWeb3() {
+            if (window.ethereum) {
+                window.web3 = new Web3(window.ethereum);
+                // window.ethereum.enable();
+                window.ethereum.request({ method: 'eth_requestAccounts' });
+            }
+        }
+
+        let currentAccount = null;
+
+        // For now, 'eth_accounts' will continue to always return an array
+        function handleAccountsChanged(accounts) {
+            if (accounts.length === 0) {
+                console.log("Please connect to MetaMask.");
+            } else if (accounts[0] !== currentAccount) {
+                currentAccount = accounts[0];
+                updateCurrentAddress(currentAccount);
+                listReservations();
+            }
+        }
+
+        window.ethereum
+            .request({ method: 'eth_accounts' })
+            .then(handleAccountsChanged)
+            .catch((err) => {
+                // Some unexpected error.
+                // For backwards compatibility reasons, if no accounts are available,
+                // eth_accounts will return an empty array.
+                console.log(err);
+            });
+
+        // Note that this event is emitted on page load.
+        // If the array of accounts is non-empty, you're already
+        // connected.
+        window.ethereum.on('accoundsChanged', handleAccountsChanged);
+
+        let abi = [
+            {
+                "anonymous": false,
+                "inputs": [
+                    {
+                        "indexed": false,
+                        "internalType": "address",
+                        "name": "from",
+                        "type": "address"
+                    },
+                    {
+                        "components": [
+                            {
+                                "internalType": "string",
+                                "name": "room",
+                                "type": "string"
+                            },
+                            {
+                                "internalType": "string",
+                                "name": "timestamp",
+                                "type": "string"
+                            },
+                            {
+                                "internalType": "string",
+                                "name": "owner",
+                                "type": "string"
+                            }
+                        ],
+                        "indexed": false,
+                        "internalType": "struct HotelReserveBlockchain.Reservation",
+                        "name": "reservation",
+                        "type": "tuple"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "bytes32",
+                        "name": "hashed",
+                        "type": "bytes32"
+                    }
+                ],
+                "name": "ReservationAdded",
+                "type": "event"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {
+                        "indexed": false,
+                        "internalType": "address",
+                        "name": "from",
+                        "type": "address"
+                    },
+                    {
+                        "components": [
+                            {
+                                "internalType": "string",
+                                "name": "room",
+                                "type": "string"
+                            },
+                            {
+                                "internalType": "string",
+                                "name": "timestamp",
+                                "type": "string"
+                            },
+                            {
+                                "internalType": "string",
+                                "name": "owner",
+                                "type": "string"
+                            }
+                        ],
+                        "indexed": false,
+                        "internalType": "struct HotelReserveBlockchain.Reservation",
+                        "name": "reservation",
+                        "type": "tuple"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "string",
+                        "name": "reason",
+                        "type": "string"
+                    }
+                ],
+                "name": "ReservationError",
+                "type": "event"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "string",
+                        "name": "room",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "string",
+                        "name": "timestamp",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "string",
+                        "name": "owner",
+                        "type": "string"
+                    }
+                ],
+                "name": "addReservation",
+                "outputs": [],
+                "stateMutability": "payable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "components": [
+                            {
+                                "internalType": "string",
+                                "name": "room",
+                                "type": "string"
+                            },
+                            {
+                                "internalType": "string",
+                                "name": "timestamp",
+                                "type": "string"
+                            },
+                            {
+                                "internalType": "string",
+                                "name": "owner",
+                                "type": "string"
+                            }
+                        ],
+                        "internalType": "struct HotelReserveBlockchain.Reservation",
+                        "name": "reservation",
+                        "type": "tuple"
+                    }
+                ],
+                "name": "checkReservation",
+                "outputs": [
+                    {
+                        "internalType": "bool",
+                        "name": "",
+                        "type": "bool"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "listAllReservations",
+                "outputs": [
+                    {
+                        "components": [
+                            {
+                                "internalType": "string",
+                                "name": "room",
+                                "type": "string"
+                            },
+                            {
+                                "internalType": "string",
+                                "name": "timestamp",
+                                "type": "string"
+                            },
+                            {
+                                "internalType": "string",
+                                "name": "owner",
+                                "type": "string"
+                            }
+                        ],
+                        "internalType": "struct HotelReserveBlockchain.Reservation[]",
+                        "name": "",
+                        "type": "tuple[]"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            }
+        ]
+
+        async function loadContract() {
+            return await new window.web3.eth.Contract(abi, '0x666cB1307C4D7D85240c69E9df9340b57a360984');
+        }
+
+        async function load() {
+            await loadWeb3();
+            window.contract = await loadContract();
+            updateStatus('Ready!');
+        }
+
+        function updateStatus(status) {
+            const statusEl = document.getElementById('status');
+            statusEl.innerHTML = status;
+            console.log(status);
+        }
+
+        function updateCurrentAddress(currentAddress) {
+            const currentAddressEl = document.getElementById('current-address');
+            currentAddressEl.innerHTML = "<b>Current Account:</b> " + currentAddress;
+
+            console.log("Current Account: ", currentAddress);
+        }
+
+        $("#btnReserve1").click(function () {
+            let data = {
+                timestamp: new Date().getTime().toString(),
+                room: hotelData[0].Room,
+                owner: currentAccount,
+            }
+            addReservation(data, hotelData[0].Price);
+        });
+
+        $("#btnReserve2").click(function () {
+            let data = {
+                timestamp: new Date().getTime().toString(),
+                room: hotelData[1].Room,
+                owner: currentAccount,
+            }
+            addReservation(data, hotelData[1].Price);
+        });
+
+        $("#btnReserve3").click(function () {
+            let data = {
+                timestamp: new Date().getTime().toString(),
+                room: hotelData[2].Room,
+                owner: currentAccount,
+            }
+            addReservation(data, hotelData[2].Price);
+        });
+
+        $("#btnReserve4").click(function () {
+            let data = {
+                timestamp: new Date().getTime().toString(),
+                room: hotelData[3].Room,
+                owner: currentAccount,
+            }
+            addReservation(data, hotelData[3].Price);
+        });
+
+        $("#btnReserve5").click(function () {
+            let data = {
+                timestamp: new Date().getTime().toString(),
+                room: hotelData[4].Room,
+                owner: currentAccount,
+            }
+            addReservation(data, hotelData[4].Price);
+        });
+
+        $("#btnReserve6").click(function () {
+            let data = {
+                timestamp: new Date().getTime().toString(),
+                room: hotelData[5].Room,
+                owner: currentAccount,
+            }
+            addReservation(data, hotelData[5].Price);
+        });
+
+        $("#reservationCheck").click(function () {
+            let data = {
+                timestamp: $("#timestamp").val(),
+                room: $("#combobox").val(),
+                owner: currentAccount,
+            }
+            console.log(data);
+
+            window.contract.methods.checkReservation(data).call(function (error, result) {
+                if (!error) {
+                    $("#result").html(result.toString());
+                } else {
+                    console.error(error);
+                }
+            });
+        });
+
+        function addReservation(data, value) {
+
+            window.contract.methods.addReservation(data?.room, data?.timestamp, data?.owner)
+                .send({ from: currentAccount, value: value * 1000000000000000000 }, function (error, result) {
+                    $("#result").html(result);
+                });
+
+            window.contract.once('ReservationAdded', {}, function (error, event) {
+                if (!error) {
+                    console.log(event);
+                    $("#result").html("reservation data: " + event.returnValues.reservation + "<br/> => Hashed as: " + event.returnValues.hashed);
+                    listReservations();
+                }
+            });
+
+            window.contract.once('ReservationError', {}, function (error, event) {
+                if (!error) {
+                    console.log(event);
+                    $("#result").html("Error: " + event.returnValues.reservation + "<br/> => Reason: " + event.returnValues.reason);
+                    return;
+                }
+            });
+        }
+
+        function listReservations() {
+            window.contract.methods.listAllReservations().call(function (error, result) {
+                if (!error) {
+                    console.log(result);
+                    
+                    var table = document.getElementById("reserve-table");
+                    table.innerHTML = "";
+
+                    var head = table.createTHead();
+                    var row_head = head.insertRow(0);
+
+                    var head_cell0 = row_head.insertCell(0);
+                    head_cell0.setAttribute("width", "15%");
+                    head_cell0.innerHTML = "<b>Time</b>";
+
+                    var head_cell1 = row_head.insertCell(1);
+                    head_cell1.setAttribute("width", "20%");
+                    head_cell1.innerHTML = "<b>Timestamp</b>";
+
+                    var head_cell2 = row_head.insertCell(2);
+                    head_cell2.setAttribute("width", "15%");
+                    head_cell2.innerHTML = "<b>Room</b>";
+
+                    var head_cell3 = row_head.insertCell(3);
+                    head_cell3.setAttribute("width", "30%");
+                    head_cell3.innerHTML = "<b>Owner (Address)</b>";
+
+
+                    var body = table.createTBody();
+
+                    result.forEach(element => {
+                        var row = body.insertRow(0);
+
+                        var cell0 = row.insertCell(0);
+                        cell0.innerHTML = new Date(Number(element?.timestamp)).toLocaleTimeString();
+
+                        var cell1 = row.insertCell(1);
+                        cell1.innerHTML = element?.timestamp;
+
+                        var cell2 = row.insertCell(2);
+                        cell2.innerHTML = element?.room;
+
+                        var cell3 = row.insertCell(3);
+                        cell3.innerHTML = element?.owner;
+                    });
+                    
+                } else {
+                    console.error(error);
+                }
+
+            });
+        }
+
+        load();
+    </script>
+</body>
+
+</html>
